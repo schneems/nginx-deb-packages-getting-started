@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+set -o pipefail
+set -eu
+
+export ROOTDIR="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )/.."
+# Ensure PORT is set
+PORT=${PORT:?Error: PORT env var is not set!}
+# Location in root where to find the template
+CONF_TEMPLATE="nginx.conf.template"
+
+# Substitutes env vars like ${PORT} from an input template into a temp file
+#   e.g. tmpenvsub "$PWD/nginx.conf.template" => /tmp/tmp.SLToit9Ltz
+tmpenvsub() {
+    local out_conf=$(mktemp)
+    envsubst "$(printf '${%s} ' $(env | cut -d= -f1))" < "$1" > "$out_conf"
+    echo "$out_conf"
+}
+
+# Boots nginx given an input template
+boot_nginx_template() {
+    local conf=$(tmpenvsub "$1")
+    # Boot server
+    echo "Booting with config:"
+    echo
+    cat $conf | sed 's/^/    /'
+    echo
+    echo "Running $ nginx -c $conf"
+    echo
+
+    nginx -c $conf || nginx -c $conf -t
+}
+
+boot_nginx_template "$ROOTDIR/$CONF_TEMPLATE"

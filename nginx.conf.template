@@ -1,0 +1,59 @@
+# Used along with `envsubst` to generate a dynamic config
+
+# Run in the foreground
+daemon off;
+# No pid needed when running in foreground
+pid /dev/null;
+
+# Print log to STDOUT
+error_log /dev/stdout info;
+http {
+
+    server {
+        listen ${PORT};
+
+        root ${ROOTDIR}/public;
+        index index.html;
+
+
+        # Prevent `[emerg] 22#22: open() "/var/log/nginx/access.log" failed`
+        access_log off;
+
+        location ~*\.css$ {
+            types {text/css css;}
+        }
+        location ~*\.js$ {
+            types {text/javascript js;}
+        }
+    }
+
+
+    # Work around `/var/lib` not writeable
+    #
+    # By default nginx defaults to reading/writing data from sources
+    # on disk that we do not have permission to modify such as `/var/lib/nginx/body`
+    #
+    # By setting these values below to `/tmp` (which is writeable) we
+    # avoid errors such as:
+    #
+    #       [emerg] 22#22: mkdir() "/var/lib/nginx/body" failed (2: No such file or directory)`
+    #       [emerg] 23#23: mkdir() "/var/lib/nginx/uwsgi" failed (2: No such file or directory)
+    #       [emerg] 22#22: mkdir() "/var/lib/nginx/scgi" failed (2: No such file or directory)
+    #
+    proxy_temp_path /tmp/nginx.temp_path;
+    proxy_cache_path /tmp/nginx.cache_path levels=1:2 keys_zone=proxy:16m inactive=24h max_size=512m;
+    fastcgi_temp_path /tmp/nginx.fastcgi_temp_path;
+    client_body_temp_path /tmp/nginx.client_body_temp_path;
+
+    uwsgi_temp_path /tmp/nginx.uwsgi_temp 1 2;
+    uwsgi_cache_path /tmp/nginx.uwsgi_cache_path levels=1:2 keys_zone=uwsgi:10m;
+
+    scgi_temp_path /tmp/nging.scgi_temp 1 2;
+    scgi_cache_path /tmp/nginx.scgi_cache_path levels=1:2 keys_zone=scgi:10m;
+
+    #
+    # END Work around `/var/lib` not writeable
+}
+
+# Must be present to prevent `nginx: [emerg] no "events" section in configuration`
+events {}
