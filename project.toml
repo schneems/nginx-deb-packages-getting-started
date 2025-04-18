@@ -1,13 +1,13 @@
 [_]
 schema-version = "0.2"
 
-[com.heroku.buildpacks.deb-packages]
-install = [
-    "nginx"
-]
-
 [[io.buildpacks.group]]
 uri = "heroku/deb-packages"
 
 [[io.buildpacks.group]]
 uri = "heroku/procfile"
+
+[com.heroku.buildpacks.deb-packages]
+install = [
+    "nginx"
+]

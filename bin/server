@@ -3,6 +3,7 @@
 set -o pipefail
 set -eu
 
+# Make available inside of `nginx.conf.template`
 export ROOTDIR="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )/.."
 # Ensure PORT is set
 PORT=${PORT:?Error: PORT env var is not set!}
@@ -30,5 +31,4 @@ boot_nginx_template() {
 
     nginx -c $conf || nginx -c $conf -t
 }
-
 boot_nginx_template "$ROOTDIR/$CONF_TEMPLATE"
