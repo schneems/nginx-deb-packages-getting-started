@@ -3,32 +3,106 @@
 set -o pipefail
 set -eu
 
-# Make available inside of `nginx.conf.template`
+# Root directory of project (where README.md lives)
 export ROOTDIR="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )/.."
 # Ensure PORT is set
 PORT=${PORT:?Error: PORT env var is not set!}
-# Location in root where to find the template
-CONF_TEMPLATE="nginx.conf.template"
 
-# Substitutes env vars like ${PORT} from an input template into a temp file
-#   e.g. tmpenvsub "$PWD/nginx.conf.template" => /tmp/tmp.SLToit9Ltz
-tmpenvsub() {
-    local out_conf=$(mktemp)
-    envsubst "$(printf '${%s} ' $(env | cut -d= -f1))" < "$1" > "$out_conf"
-    echo "$out_conf"
+# Main entrypoint: Boot nginx
+#
+# Example
+#
+# ```term
+# $ main
+#   Booting with config:
+#   ...
+# ```
+main() {
+    boot_nginx_template "$ROOTDIR/nginx.template.conf"
 }
 
 # Boots nginx given an input template
+#
+# Example
+#
+# ```term
+# $ cat nginx.template.conf | grep PORT
+#    listen ${PORT};
+#    listen [::]:${PORT};
+# $ boot_nginx_template "$PWD/nginx.template.conf"
+#   Booting with config:
+#   ...
+# ```
 boot_nginx_template() {
-    local conf=$(tmpenvsub "$1")
-    # Boot server
+    # Substitute env vars in the passed in template, the return is a temp file
+    # with env vars applied
+    local config=$(tmpenvsub "$1")
     echo "Booting with config:"
     echo
-    cat $conf | sed 's/^/    /'
+    cat $config | sed 's/^/    /'
     echo
-    echo "Running $ nginx -c $conf"
+    echo "Running $ nginx -c $config"
     echo
 
-    nginx -c $conf || nginx -c $conf -t
+    # See `handle_signal()` for signal handling docs
+    for sig in SIGINT SIGTERM SIGHUP SIGQUIT SIGTSTP SIGCONT; do
+        trap "handle_signal $sig" $sig
+    done
+
+    # Run nginx in the background (trailing `&`) and wait of it to exit
+    # when our script gets a signal like SIGTERM, we forward it to nginx
+    nginx -c $config &
+    NGINX_PID=$!
+    wait $NGINX_PID
 }
-boot_nginx_template "$ROOTDIR/$CONF_TEMPLATE"
+
+# Substitutes env vars like ${PORT} from an input template into a temp file
+#   e.g. tmpenvsub "$PWD/nginx.conf.template" => /tmp/tmp.SLToit9Ltz
+#
+# Example
+#
+# ```term
+# $ echo "$PORT"
+# 1234
+# $ cat nginx.template.conf | grep PORT
+#    listen ${PORT};
+#    listen [::]:${PORT};
+# $ config=tmpenvsub "$PWD/nginx.tmplate.conf"
+#
+# # Env vars are replaced:
+# $ cat $config | grep listen
+#    listen 1234;
+#    listen [::]:1234;
+# ```
+tmpenvsub() {
+    local out_config=$(mktemp)
+    local in_template=$1
+    # This is the same trick used by the [official nginx docker image](https://github.com/docker-library/docs/tree/fb6960bc8668510dc92309348dfe1a055c5b8093/nginx#using-environment-variables-in-nginx-configuration-new-in-119)
+    # Nginx docker source: https://github.com/nginx/docker-nginx/blame/4e08af2988063a3b02420ef0040e2e13fc9d93d6/entrypoint/20-envsubst-on-templates.sh#L53
+    envsubst "$(printf '${%s} '$(env | cut -d= -f1))" < "$in_template" > "$out_config"
+    echo "$out_config"
+}
+
+# Forward signals to Nginx. This function is called when this script receives
+# a signal such as TERM or QUIT
+# Expects `NGINX_PID` to be set
+handle_signal() {
+    local signal=$1
+    if [ -z "${NGINX_PID:-}" ]; then
+        echo "NGINX_PID is not set. Nothing to signal."
+        return
+    fi
+
+    # Heroku uses SIGTERM for "soft shutdown" while NGINX uses SIGQUIT
+    # https://devcenter.heroku.com/articles/dyno-shutdown-behavior
+    if [ "$signal" = "TERM" ]; then
+        echo "Received TERM signal, sending QUIT to Nginx"
+        kill -QUIT "$NGINX_PID"
+    else
+        echo "Forwarding $signal to Nginx"
+        kill -"$signal" "$NGINX_PID"
+    fi
+}
+
+# Run the program
+main
