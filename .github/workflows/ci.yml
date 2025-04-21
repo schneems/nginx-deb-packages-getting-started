@@ -23,3 +23,31 @@ jobs:
         uses: docker://mvdan/shfmt:latest
         with:
           args: "--diff ."
+
+  pack-test:
+    runs-on: 'ubuntu-24.04'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Pack CLI
+        uses: buildpacks/github-actions/setup-pack@d82294e03fd6b8e8484cde2ee166788876e366e3 # v5.8.10
+      - name: Pull builder and run images
+        run: |
+          docker pull "heroku/builder:24"
+          docker pull "heroku/heroku:24"
+      - name: "PRINT: pack build"
+        run: pack build nginx-image --force-color --builder heroku/builder:24 --path . --pull-policy never
+      - name: "Boot webserver and call it"
+        run: |
+            set -euo pipefail
+            # Leader for `set -o xtrace` output <https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html>
+            PS4='>\e[33m${BASH_SOURCE}:${LINENO} $\e[0m '
+            # Logs all bash commands after this point
+            set -o xtrace
+
+            # Run in background
+            docker run --rm --env PORT=5006 -p 5006:5006 nginx-image &
+            sleep 10
+
+            # Test output
+            curl --fail --retry 30 --retry-delay 2 localhost:5006 | grep "Getting started with"
