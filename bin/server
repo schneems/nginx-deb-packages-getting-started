@@ -4,7 +4,10 @@ set -o pipefail
 set -eu
 
 # Root directory of project (where README.md lives)
-ROOTDIR="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )/.."
+ROOTDIR="$(
+	cd -- "$(dirname "$0")" >/dev/null 2>&1
+	pwd -P
+)/.."
 export ROOTDIR
 
 # Ensure PORT is set
@@ -20,7 +23,7 @@ PORT=${PORT:?Error: PORT env var is not set!}
 #   ...
 # ```
 main() {
-    boot_nginx_template "$ROOTDIR/nginx.template.conf"
+	boot_nginx_template "$ROOTDIR/nginx.template.conf"
 }
 
 # Boots nginx given an input template
@@ -36,29 +39,29 @@ main() {
 #   ...
 # ```
 boot_nginx_template() {
-    local config
-    # Substitute env vars in the passed in template, the return is a temp file
-    # with env vars applied
-    config=$(tmpenvsub "$1")
-    echo "Booting with config:"
-    echo
-    # shellcheck disable=SC2002
-    cat "$config" | sed 's/^/    /'
-    echo
-    echo "Running $ nginx -c $config"
-    echo
+	local config
+	# Substitute env vars in the passed in template, the return is a temp file
+	# with env vars applied
+	config=$(tmpenvsub "$1")
+	echo "Booting with config:"
+	echo
+	# shellcheck disable=SC2002
+	cat "$config" | sed 's/^/    /'
+	echo
+	echo "Running $ nginx -c $config"
+	echo
 
-    # See `handle_signal()` for signal handling docs
-    for sig in SIGINT SIGTERM SIGHUP SIGQUIT SIGTSTP SIGCONT; do
-        # shellcheck disable=SC2064
-        trap "handle_signal $sig" $sig
-    done
+	# See `handle_signal()` for signal handling docs
+	for sig in SIGINT SIGTERM SIGHUP SIGQUIT SIGTSTP SIGCONT; do
+		# shellcheck disable=SC2064
+		trap "handle_signal $sig" $sig
+	done
 
-    # Run nginx in the background (trailing `&`) and wait of it to exit
-    # when our script gets a signal like SIGTERM, we forward it to nginx
-    nginx -c "$config" &
-    NGINX_PID=$!
-    wait "$NGINX_PID"
+	# Run nginx in the background (trailing `&`) and wait of it to exit
+	# when our script gets a signal like SIGTERM, we forward it to nginx
+	nginx -c "$config" &
+	NGINX_PID=$!
+	wait "$NGINX_PID"
 }
 
 # Substitutes env vars like ${PORT} from an input template into a temp file
@@ -80,35 +83,35 @@ boot_nginx_template() {
 #    listen [::]:1234;
 # ```
 tmpenvsub() {
-    local out_config
-    out_config="$(mktemp)"
-    local in_template="$1"
-    # This is the same trick used by the [official nginx docker image](https://github.com/docker-library/docs/tree/fb6960bc8668510dc92309348dfe1a055c5b8093/nginx#using-environment-variables-in-nginx-configuration-new-in-119)
-    # Nginx docker source: https://github.com/nginx/docker-nginx/blame/4e08af2988063a3b02420ef0040e2e13fc9d93d6/entrypoint/20-envsubst-on-templates.sh#L53
-    # shellcheck disable=SC2046 disable=SC2016
-    envsubst "$(printf '${%s} '$(env | cut -d= -f1))" < "$in_template" > "$out_config"
-    echo "$out_config"
+	local out_config
+	out_config="$(mktemp)"
+	local in_template="$1"
+	# This is the same trick used by the [official nginx docker image](https://github.com/docker-library/docs/tree/fb6960bc8668510dc92309348dfe1a055c5b8093/nginx#using-environment-variables-in-nginx-configuration-new-in-119)
+	# Nginx docker source: https://github.com/nginx/docker-nginx/blame/4e08af2988063a3b02420ef0040e2e13fc9d93d6/entrypoint/20-envsubst-on-templates.sh#L53
+	# shellcheck disable=SC2046 disable=SC2016
+	envsubst "$(printf '${%s} '$(env | cut -d= -f1))" <"$in_template" >"$out_config"
+	echo "$out_config"
 }
 
 # Forward signals to Nginx. This function is called when this script receives
 # a signal such as TERM or QUIT
 # Expects `NGINX_PID` to be set
 handle_signal() {
-    local signal=$1
-    if [ -z "${NGINX_PID:-}" ]; then
-        echo "NGINX_PID is not set. Nothing to signal."
-        return
-    fi
+	local signal=$1
+	if [ -z "${NGINX_PID:-}" ]; then
+		echo "NGINX_PID is not set. Nothing to signal."
+		return
+	fi
 
-    # Heroku uses SIGTERM for "soft shutdown" while NGINX uses SIGQUIT
-    # https://devcenter.heroku.com/articles/dyno-shutdown-behavior
-    if [ "$signal" = "TERM" ]; then
-        echo "Received TERM signal, sending QUIT to Nginx"
-        kill -QUIT "$NGINX_PID"
-    else
-        echo "Forwarding $signal to Nginx"
-        kill -"$signal" "$NGINX_PID"
-    fi
+	# Heroku uses SIGTERM for "soft shutdown" while NGINX uses SIGQUIT
+	# https://devcenter.heroku.com/articles/dyno-shutdown-behavior
+	if [ "$signal" = "TERM" ]; then
+		echo "Received TERM signal, sending QUIT to Nginx"
+		kill -QUIT "$NGINX_PID"
+	else
+		echo "Forwarding $signal to Nginx"
+		kill -"$signal" "$NGINX_PID"
+	fi
 }
 
 # Run the program
